@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EIP 社團管理系統</title>
+
+  <!-- React CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Tailwind CSS 4 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 自定義動畫 */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.8); }
+    }
+
+    .animate-fadeIn {
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    .animate-slideIn {
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .animate-glow {
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    /* 滾動條樣式 */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(139, 92, 246, 0.5);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(139, 92, 246, 0.7);
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-white">
+<div id="root"></div>
+
+<script type="text/babel">
+  const { useState, useEffect, useCallback, useMemo } = React;
+
+  // 初始化 localStorage 資料結構
+  const initializeData = () => {
+    if (!localStorage.getItem('users')) {
+      localStorage.setItem('users', JSON.stringify([
+        { id: 1, employeeId: 'EMP001', name: '張三', password: '123456', department: '資訊部', isAdmin: true },
+        { id: 2, employeeId: 'EMP002', name: '李四', password: '123456', department: '人資部', isAdmin: false },
+        { id: 3, employeeId: 'EMP003', name: '王五', password: '123456', department: '業務部', isAdmin: false }
+      ]));
+    }
+
+    if (!localStorage.getItem('clubs')) {
+      localStorage.setItem('clubs', JSON.stringify([]));
+    }
+
+    if (!localStorage.getItem('clubMembers')) {
+      localStorage.setItem('clubMembers', JSON.stringify([]));
+    }
+
+    if (!localStorage.getItem('notifications')) {
+      localStorage.setItem('notifications', JSON.stringify([]));
+    }
+  };
+
+  // 資料存取函數
+  const DataService = {
+    // 使用者相關
+    getUsers: () => JSON.parse(localStorage.getItem('users') || '[]'),
+    saveUsers: (users) => localStorage.setItem('users', JSON.stringify(users)),
+
+    // 社團相關
+    getClubs: () => JSON.parse(localStorage.getItem('clubs') || '[]'),
+    saveClubs: (clubs) => localStorage.setItem('clubs', JSON.stringify(clubs)),
+
+    // 社團成員相關
+    getClubMembers: () => JSON.parse(localStorage.getItem('clubMembers') || '[]'),
+    saveClubMembers: (members) => localStorage.setItem('clubMembers', JSON.stringify(members)),
+
+    // 通知相關
+    getNotifications: () => JSON.parse(localStorage.getItem('notifications') || '[]'),
+    saveNotifications: (notifications) => localStorage.setItem('notifications', JSON.stringify(notifications)),
+
+    // 新增通知
+    addNotification: (userId, title, content) => {
+      const notifications = DataService.getNotifications();
+      const newNotification = {
+        id: Date.now(),
+        userId,
+        title,
+        content,
+        isRead: false,
+        createdAt: new Date().toISOString()
+      };
+      notifications.push(newNotification);
+      DataService.saveNotifications(notifications);
+      return newNotification;
+    }
+  };
+
+  // 登入元件
+  const LoginForm = ({ onLogin }) => {
+    const [employeeId, setEmployeeId] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      const users = DataService.getUsers();
+      const user = users.find(u => u.employeeId === employeeId && u.password === password);
+
+      if (user) {
+        onLogin(user);
+      } else {
+        setError('員工編號或密碼錯誤');
+      }
+    };
+
+    return (
+            <div className="min-h-screen flex items-center justify-center p-4">
+              <div className="bg-gray-900 p-8 rounded-2xl border border-purple-500/20 w-full max-w-md animate-fadeIn">
+                <h2 className="text-3xl font-bold text-center mb-8 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  EIP 社團管理系統
+                </h2>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">員工編號</label>
+                    <input
+                            type="text"
+                            value={employeeId}
+                            onChange={(e) => setEmployeeId(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500 transition-colors"
+                            placeholder="請輸入員工編號"
+                            required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">密碼</label>
+                    <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500 transition-colors"
+                            placeholder="請輸入密碼"
+                            required
+                    />
+                  </div>
+                  {error && (
+                          <div className="text-red-500 text-sm">{error}</div>
+                  )}
+                  <button
+                          type="submit"
+                          className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg hover:shadow-purple-500/25 transition-all transform hover:-translate-y-0.5"
+                  >
+                    登入
+                  </button>
+                </form>
+                <div className="mt-6 text-center text-sm text-gray-500">
+                  <p>測試帳號：</p>
+                  <p>管理員 - EMP001 / 123456</p>
+                  <p>一般員工 - EMP002 / 123456</p>
+                </div>
+              </div>
+            </div>
+    );
+  };
+
+  // 導航列元件
+  const Navbar = ({ user, activeTab, setActiveTab, onLogout, unreadCount }) => {
+    return (
+            <nav className="bg-gray-900/95 backdrop-blur-lg border-b border-purple-500/20 sticky top-0 z-50">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center justify-between h-16">
+                  <div className="flex items-center space-x-8">
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                      EIP 社團管理系統
+                    </h1>
+                    <div className="flex space-x-4">
+                      <button
+                              onClick={() => setActiveTab('clubs')}
+                              className={`px-4 py-2 rounded-lg transition-colors ${
+                                      activeTab === 'clubs'
+                                              ? 'bg-purple-500/20 text-purple-400'
+                                              : 'text-gray-400 hover:text-white'
+                              }`}
+                      >
+                        社團列表
+                      </button>
+                      <button
+                              onClick={() => setActiveTab('myClubs')}
+                              className={`px-4 py-2 rounded-lg transition-colors ${
+                                      activeTab === 'myClubs'
+                                              ? 'bg-purple-500/20 text-purple-400'
+                                              : 'text-gray-400 hover:text-white'
+                              }`}
+                      >
+                        我的社團
+                      </button>
+                      {user.isAdmin && (
+                              <button
+                                      onClick={() => setActiveTab('admin')}
+                                      className={`px-4 py-2 rounded-lg transition-colors ${
+                                              activeTab === 'admin'
+                                                      ? 'bg-purple-500/20 text-purple-400'
+                                                      : 'text-gray-400 hover:text-white'
+                                      }`}
+                              >
+                                管理中心
+                              </button>
+                      )}
+                      <button
+                              onClick={() => setActiveTab('notifications')}
+                              className={`px-4 py-2 rounded-lg transition-colors relative ${
+                                      activeTab === 'notifications'
+                                              ? 'bg-purple-500/20 text-purple-400'
+                                              : 'text-gray-400 hover:text-white'
+                              }`}
+                      >
+                        通知
+                        {unreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                {unreadCount}
+                                            </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-gray-400">{user.name} ({user.department})</span>
+                    <button
+                            onClick={onLogout}
+                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      登出
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </nav>
+    );
+  };
+
+  // 社團卡片元件
+  const ClubCard = ({ club, user, onJoin, onViewDetails, isMyClub = false }) => {
+    const members = DataService.getClubMembers().filter(m => m.clubId === club.id);
+    const currentMembers = members.filter(m => m.status === 'approved').length;
+    const isMember = members.some(m => m.userId === user.id && m.status === 'approved');
+    const isPending = members.some(m => m.userId === user.id && m.status === 'pending');
+    const isFounder = club.founderId === user.id;
+
+    const typeColors = {
+      sport: 'bg-blue-500/20 text-blue-400',
+      music: 'bg-green-500/20 text-green-400',
+      art: 'bg-purple-500/20 text-purple-400',
+      study: 'bg-yellow-500/20 text-yellow-400',
+      charity: 'bg-pink-500/20 text-pink-400',
+      other: 'bg-gray-500/20 text-gray-400'
+    };
+
+    const typeLabels = {
+      sport: '運動',
+      music: '音樂',
+      art: '藝術',
+      study: '學習',
+      charity: '公益',
+      other: '其他'
+    };
+
+    return (
+            <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-6 hover:border-purple-500/40 transition-all animate-fadeIn">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-xl font-bold mb-2">{club.name}</h3>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm ${typeColors[club.type]}`}>
+                                {typeLabels[club.type]}
+                            </span>
+                </div>
+                {club.status === 'pending' && (
+                        <span className="text-yellow-500 text-sm">待審核</span>
+                )}
+              </div>
+
+              <div className="space-y-2 text-gray-400 mb-4">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{club.activityTime || '未設定'}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{club.location || '未設定'}</span>
+                </div>
+              </div>
+
+              <p className="text-gray-500 mb-4 line-clamp-2">{club.description}</p>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-400">{currentMembers}/{club.memberLimit} 人</span>
+                  <div className="w-24 bg-gray-800 rounded-full h-2">
+                    <div
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
+                            style={{ width: `${(currentMembers / club.memberLimit) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  {isMyClub && isFounder && (
+                          <button
+                                  onClick={() => onViewDetails(club)}
+                                  className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                          >
+                            管理
+                          </button>
+                  )}
+                  {!isMyClub && club.status === 'approved' && (
+                          <>
+                            {!isMember && !isPending && currentMembers < club.memberLimit && (
+                                    <button
+                                            onClick={() => onJoin(club)}
+                                            className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/25 transition-all"
+                                    >
+                                      申請加入
+                                    </button>
+                            )}
+                            {isPending && (
+                                    <span className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg">
+                                            申請中
+                                        </span>
+                            )}
+                            {isMember && (
+                                    <span className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg">
+                                            已加入
+                                        </span>
+                            )}
+                            {currentMembers >= club.memberLimit && !isMember && (
+                                    <span className="px-4 py-2 bg-gray-700 text-gray-400 rounded-lg">
+                                            已額滿
+                                        </span>
+                            )}
+                          </>
+                  )}
+                </div>
+              </div>
+            </div>
+    );
+  };
+
+  // 建立社團表單
+  const CreateClubForm = ({ user, onClose, onSuccess }) => {
+    const [formData, setFormData] = useState({
+      name: '',
+      type: 'sport',
+      activityTime: '',
+      location: '',
+      description: '',
+      memberLimit: 20
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      const clubs = DataService.getClubs();
+
+      // 檢查社團名稱是否重複
+      if (clubs.some(c => c.name === formData.name)) {
+        alert('社團名稱已存在');
+        return;
+      }
+
+      const newClub = {
+        id: Date.now(),
+        ...formData,
+        founderId: user.id,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      clubs.push(newClub);
+      DataService.saveClubs(clubs);
+
+      // 將創辦人加入社團成員
+      const members = DataService.getClubMembers();
+      members.push({
+        id: Date.now(),
+        clubId: newClub.id,
+        userId: user.id,
+        role: 'founder',
+        status: 'approved',
+        joinDate: new Date().toISOString()
+      });
+      DataService.saveClubMembers(members);
+
+      // 通知管理員
+      const admins = DataService.getUsers().filter(u => u.isAdmin);
+      admins.forEach(admin => {
+        DataService.addNotification(
+                admin.id,
+                '新社團申請',
+                `${user.name} 申請成立「${formData.name}」社團`
+        );
+      });
+
+      onSuccess();
+      onClose();
+    };
+
+    return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fadeIn">
+                <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  申請成立社團
+                </h2>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      社團名稱 *
+                    </label>
+                    <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                            required
+                            maxLength={50}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      社團類型 *
+                    </label>
+                    <select
+                            value={formData.type}
+                            onChange={(e) => setFormData({...formData, type: e.target.value})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="sport">運動</option>
+                      <option value="music">音樂</option>
+                      <option value="art">藝術</option>
+                      <option value="study">學習</option>
+                      <option value="charity">公益</option>
+                      <option value="other">其他</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      活動時間
+                    </label>
+                    <input
+                            type="text"
+                            value={formData.activityTime}
+                            onChange={(e) => setFormData({...formData, activityTime: e.target.value})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                            placeholder="例如：每週三 18:00-20:00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      活動地點
+                    </label>
+                    <input
+                            type="text"
+                            value={formData.location}
+                            onChange={(e) => setFormData({...formData, location: e.target.value})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                            maxLength={100}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      社團描述
+                    </label>
+                    <textarea
+                            value={formData.description}
+                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                            rows={4}
+                            maxLength={500}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      人數限制 *
+                    </label>
+                    <input
+                            type="number"
+                            value={formData.memberLimit}
+                            onChange={(e) => setFormData({...formData, memberLimit: parseInt(e.target.value)})}
+                            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                            min={5}
+                            max={100}
+                            required
+                    />
+                  </div>
+
+                  <div className="flex space-x-4 pt-4">
+                    <button
+                            type="submit"
+                            className="flex-1 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/25 transition-all"
+                    >
+                      提交申請
+                    </button>
+                    <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+    );
+  };
+
+  // 社團列表頁面
+  const ClubListPage = ({ user }) => {
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState('all');
+    const [clubs, setClubs] = useState([]);
+
+    useEffect(() => {
+      loadClubs();
+    }, []);
+
+    const loadClubs = () => {
+      const allClubs = DataService.getClubs();
+      setClubs(allClubs.filter(c => c.status === 'approved'));
+    };
+
+    const filteredClubs = useMemo(() => {
+      return clubs.filter(club => {
+        const matchSearch = club.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                club.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchType = filterType === 'all' || club.type === filterType;
+        return matchSearch && matchType;
+      });
+    }, [clubs, searchTerm, filterType]);
+
+    const handleJoinClub = (club) => {
+      const members = DataService.getClubMembers();
+      const newMember = {
+        id: Date.now(),
+        clubId: club.id,
+        userId: user.id,
+        role: 'member',
+        status: 'pending',
+        appliedDate: new Date().toISOString()
+      };
+
+      members.push(newMember);
+      DataService.saveClubMembers(members);
+
+      // 通知社團創辦人
+      const clubs = DataService.getClubs();
+      const targetClub = clubs.find(c => c.id === club.id);
+      DataService.addNotification(
+              targetClub.founderId,
+              '新的加入申請',
+              `${user.name} 申請加入「${club.name}」社團`
+      );
+
+      alert('申請已送出，請等待社團管理員審核');
+      loadClubs();
+    };
+
+    return (
+            <div className="max-w-7xl mx-auto p-6">
+              {/* 頁面標題 */}
+              <div className="text-center mb-8">
+                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
+                  探索社團
+                </h1>
+                <p className="text-gray-400">加入感興趣的社團，認識志同道合的夥伴</p>
+              </div>
+
+              {/* 搜尋和篩選 */}
+              <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                          type="text"
+                          placeholder="搜尋社團名稱或描述..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                  />
+                  <select
+                          value={filterType}
+                          onChange={(e) => setFilterType(e.target.value)}
+                          className="px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="all">所有類型</option>
+                    <option value="sport">運動</option>
+                    <option value="music">音樂</option>
+                    <option value="art">藝術</option>
+                    <option value="study">學習</option>
+                    <option value="charity">公益</option>
+                    <option value="other">其他</option>
+                  </select>
+                  <button
+                          onClick={() => setShowCreateForm(true)}
+                          className="py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/25 transition-all"
+                  >
+                    建立社團
+                  </button>
+                </div>
+              </div>
+
+              {/* 社團列表 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredClubs.map(club => (
+                        <ClubCard
+                                key={club.id}
+                                club={club}
+                                user={user}
+                                onJoin={handleJoinClub}
+                        />
+                ))}
+              </div>
+
+              {filteredClubs.length === 0 && (
+                      <div className="text-center py-12 text-gray-500">
+                        沒有找到符合條件的社團
+                      </div>
+              )}
+
+              {/* 建立社團表單 */}
+              {showCreateForm && (
+                      <CreateClubForm
+                              user={user}
+                              onClose={() => setShowCreateForm(false)}
+                              onSuccess={loadClubs}
+                      />
+              )}
+            </div>
+    );
+  };
+
+  // 我的社團頁面
+  const MyClubsPage = ({ user }) => {
+    const [myClubs, setMyClubs] = useState([]);
+    const [selectedClub, setSelectedClub] = useState(null);
+    const [members, setMembers] = useState([]);
+    const [pendingMembers, setPendingMembers] = useState([]);
+
+    useEffect(() => {
+      loadMyClubs();
+    }, []);
+
+    useEffect(() => {
+      if (selectedClub) {
+        loadClubMembers();
+      }
+    }, [selectedClub]);
+
+    const loadMyClubs = () => {
+      const allClubs = DataService.getClubs();
+      const myMembers = DataService.getClubMembers().filter(
+              m => m.userId === user.id && (m.status === 'approved' || m.role === 'founder')
+      );
+      const clubIds = myMembers.map(m => m.clubId);
+      const clubs = allClubs.filter(c => clubIds.includes(c.id) || c.founderId === user.id);
+      setMyClubs(clubs);
+    };
+
+    const loadClubMembers = () => {
+      const allMembers = DataService.getClubMembers().filter(m => m.clubId === selectedClub.id);
+      setMembers(allMembers.filter(m => m.status === 'approved'));
+      setPendingMembers(allMembers.filter(m => m.status === 'pending'));
+    };
+
+    const handleApproveMember = (member) => {
+      const allMembers = DataService.getClubMembers();
+      const index = allMembers.findIndex(m => m.id === member.id);
+      allMembers[index].status = 'approved';
+      allMembers[index].joinDate = new Date().toISOString();
+      DataService.saveClubMembers(allMembers);
+
+      // 更新社團成員數
+      const clubs = DataService.getClubs();
+      const clubIndex = clubs.findIndex(c => c.id === selectedClub.id);
+      const approvedCount = allMembers.filter(m => m.clubId === selectedClub.id && m.status === 'approved').length;
+      clubs[clubIndex].currentMembers = approvedCount;
+      DataService.saveClubs(clubs);
+
+      // 通知申請者
+      DataService.addNotification(
+              member.userId,
+              '申請已通過',
+              `您加入「${selectedClub.name}」社團的申請已通過`
+      );
+
+      loadClubMembers();
+      loadMyClubs();
+    };
+
+    const handleRejectMember = (member) => {
+      const allMembers = DataService.getClubMembers();
+      const newMembers = allMembers.filter(m => m.id !== member.id);
+      DataService.saveClubMembers(newMembers);
+
+      // 通知申請者
+      DataService.addNotification(
+              member.userId,
+              '申請已拒絕',
+              `您加入「${selectedClub.name}」社團的申請已被拒絕`
+      );
+
+      loadClubMembers();
+    };
+
+    const handleUpdateClub = (e) => {
+      e.preventDefault();
+      const clubs = DataService.getClubs();
+      const index = clubs.findIndex(c => c.id === selectedClub.id);
+      clubs[index] = selectedClub;
+      DataService.saveClubs(clubs);
+      alert('社團資訊已更新');
+      loadMyClubs();
+    };
+
+    return (
+            <div className="max-w-7xl mx-auto p-6">
+              <h1 className="text-3xl font-bold mb-8">我的社團</h1>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* 社團列表 */}
+                <div className="lg:col-span-1">
+                  <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-4">
+                    <h2 className="text-xl font-bold mb-4">社團列表</h2>
+                    <div className="space-y-2">
+                      {myClubs.map(club => (
+                              <button
+                                      key={club.id}
+                                      onClick={() => setSelectedClub(club)}
+                                      className={`w-full text-left p-3 rounded-lg transition-colors ${
+                                              selectedClub?.id === club.id
+                                                      ? 'bg-purple-500/20 text-purple-400'
+                                                      : 'hover:bg-gray-800'
+                                      }`}
+                              >
+                                <div className="font-medium">{club.name}</div>
+                                <div className="text-sm text-gray-500">
+                                  {club.founderId === user.id ? '創辦人' : '成員'}
+                                </div>
+                              </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 社團詳情 */}
+                <div className="lg:col-span-2">
+                  {selectedClub ? (
+                          <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-6">
+                            <h2 className="text-2xl font-bold mb-6">{selectedClub.name}</h2>
+
+                            {selectedClub.founderId === user.id ? (
+                                    <>
+                                      {/* 社團資訊編輯 */}
+                                      <form onSubmit={handleUpdateClub} className="space-y-4 mb-8">
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                                            活動時間
+                                          </label>
+                                          <input
+                                                  type="text"
+                                                  value={selectedClub.activityTime || ''}
+                                                  onChange={(e) => setSelectedClub({...selectedClub, activityTime: e.target.value})}
+                                                  className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                                            活動地點
+                                          </label>
+                                          <input
+                                                  type="text"
+                                                  value={selectedClub.location || ''}
+                                                  onChange={(e) => setSelectedClub({...selectedClub, location: e.target.value})}
+                                                  className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-400 mb-2">
+                                            社團描述
+                                          </label>
+                                          <textarea
+                                                  value={selectedClub.description || ''}
+                                                  onChange={(e) => setSelectedClub({...selectedClub, description: e.target.value})}
+                                                  className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg focus:outline-none focus:border-purple-500"
+                                                  rows={3}
+                                          />
+                                        </div>
+                                        <button
+                                                type="submit"
+                                                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg hover:shadow-purple-500/25 transition-all"
+                                        >
+                                          更新資訊
+                                        </button>
+                                      </form>
+
+                                      {/* 待審核成員 */}
+                                      {pendingMembers.length > 0 && (
+                                              <div className="mb-8">
+                                                <h3 className="text-lg font-bold mb-4">待審核申請 ({pendingMembers.length})</h3>
+                                                <div className="space-y-3">
+                                                  {pendingMembers.map(member => {
+                                                    const userInfo = DataService.getUsers().find(u => u.id === member.userId);
+                                                    return (
+                                                            <div key={member.id} className="bg-gray-800 rounded-lg p-4 flex items-center justify-between">
+                                                              <div>
+                                                                <div className="font-medium">{userInfo?.name}</div>
+                                                                <div className="text-sm text-gray-500">{userInfo?.department}</div>
+                                                              </div>
+                                                              <div className="flex space-x-2">
+                                                                <button
+                                                                        onClick={() => handleApproveMember(member)}
+                                                                        className="px-3 py-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                                                                >
+                                                                  同意
+                                                                </button>
+                                                                <button
+                                                                        onClick={() => handleRejectMember(member)}
+                                                                        className="px-3 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                                                                >
+                                                                  拒絕
+                                                                </button>
+                                                              </div>
+                                                            </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+                                      )}
+                                    </>
+                            ) : (
+                                    <div className="space-y-4">
+                                      <div>
+                                        <span className="text-gray-400">活動時間：</span>
+                                        <span>{selectedClub.activityTime || '未設定'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-400">活動地點：</span>
+                                        <span>{selectedClub.location || '未設定'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-400">社團描述：</span>
+                                        <p className="mt-1">{selectedClub.description || '暫無描述'}</p>
+                                      </div>
+                                    </div>
+                            )}
+
+                            {/* 成員列表 */}
+                            <div>
+                              <h3 className="text-lg font-bold mb-4 mt-8">社團成員 ({members.length})</h3>
+                              <div className="space-y-2">
+                                {members.map(member => {
+                                  const userInfo = DataService.getUsers().find(u => u.id === member.userId);
+                                  return (
+                                          <div key={member.id} className="bg-gray-800 rounded-lg p-3 flex items-center justify-between">
+                                            <div>
+                                              <span className="font-medium">{userInfo?.name}</span>
+                                              <span className="text-gray-500 ml-2">({userInfo?.department})</span>
+                                            </div>
+                                            {member.role === 'founder' && (
+                                                    <span className="text-purple-400 text-sm">創辦人</span>
+                                            )}
+                                          </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                  ) : (
+                          <div className="bg-gray-900 rounded-xl border border-purple-500/20 p-6 text-center text-gray-500">
+                            請選擇一個社團查看詳情
+                          </div>
+                  )}
+                </div>
+              </div>
+            </div>
+    );
+  };
+
+  // 管理員頁面
+  const AdminPage = ({ user }) => {
+    const [pendingClubs, setPendingClubs] = useState([]);
+    const [activeTab, setActiveTab] = useState('pending');
+
+    useEffect(() => {
+      loadPendingClubs();
+    }, []);
+
+    const loadPendingClubs = () => {
+      const clubs = DataService.getClubs().filter(c => c.status === 'pending');
+      setPendingClubs(clubs);
+    };
+
+    const handleApproveClub = (club) => {
+      const clubs = DataService.getClubs();
+      const index = clubs.findIndex(c => c.id === club.id);
+      clubs[index].status = 'approved';
+      DataService.saveClubs(clubs);
+
+      // 通知創辦人
+      DataService.addNotification(
+              club.founderId,
+              '社團申請已通過',
+              `您申請的「${club.name}」社團已通過審核`
+      );
+
+      loadPendingClubs();
+    };
+
+    const handleRejectClub = (club) => {
+      const reason = prompt('請輸入拒絕原因：');
+      if (!reason) return;
+
+      const clubs = DataService.getClubs();
+      const index = clubs.findIndex(c => c.id === club.id);
+      clubs[index].status = 'rejected';
+      clubs[index].rejectReason = reason;
+      DataService.saveClubs(clubs);
+
+      // 通知創辦人
+      DataService.addNotification(
+              club.founderId,
+              '社團申請已拒絕',
+              `您申請的「${club.name}」社團已被拒絕。原因：${reason}`
+      );
+
+      loadPendingClubs();
+    };
+
+    return (
+            <div className="max-w-7xl mx-auto p-6">
+              <h1 className="text-3xl font-bold mb-8">管理中心</h1>
+
+              {/* 標籤頁 */}
+              <div className="flex space-x-4 mb-6 border-b border-gray-800">
+                <button
+                        onClick={() => setActiveTab('pending')}
+                        className={`pb-2 px-1 ${
+                                activeTab === 'pending'
+                                        ? 'text-purple-400 border-b-2 border-purple-400'
+                                        : 'text-gray-400'
+                        }`}
+                >
+                  待審核社團 ({pendingClubs.length})
+                </button>
+              </div>
+
+              {/* 待審核社團列表 */}
+              {activeTab === 'pending' && (
+                      <div className="space-y-4">
+                        {pendingClubs.map(club => {
+                          const founder = DataService.getUsers().find(u => u.id === club.founderId);
+                          return (
+                                  <div key={club.id} className="bg-gray-900 rounded-xl border border-purple-500/20 p-6">
+                                    <div className="flex justify-between items-start mb-4">
+                                      <div>
+                                        <h3 className="text-xl font-bold mb-2">{club.name}</h3>
+                                        <p className="text-gray-400">申請人：{founder?.name} ({founder?.department})</p>
+                                      </div>
+                                      <span className="text-yellow-500 text-sm">待審核</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                                      <div>
+                                        <span className="text-gray-400">類型：</span>
+                                        <span className="ml-2">{club.type}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-400">人數限制：</span>
+                                        <span className="ml-2">{club.memberLimit} 人</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-400">活動時間：</span>
+                                        <span className="ml-2">{club.activityTime || '未設定'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-400">活動地點：</span>
+                                        <span className="ml-2">{club.location || '未設定'}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                      <span className="text-gray-400">社團描述：</span>
+                                      <p className="mt-1">{club.description || '暫無描述'}</p>
+                                    </div>
+
+                                    <div className="flex space-x-4">
+                                      <button
+                                              onClick={() => handleApproveClub(club)}
+                                              className="px-6 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
+                                      >
+                                        同意成立
+                                      </button>
+                                      <button
+                                              onClick={() => handleRejectClub(club)}
+                                              className="px-6 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                                      >
+                                        拒絕申請
+                                      </button>
+                                    </div>
+                                  </div>
+                          );
+                        })}
+
+                        {pendingClubs.length === 0 && (
+                                <div className="text-center py-12 text-gray-500">
+                                  目前沒有待審核的社團申請
+                                </div>
+                        )}
+                      </div>
+              )}
+            </div>
+    );
+  };
+
+  // 通知頁面
+  const NotificationsPage = ({ user }) => {
+    const [notifications, setNotifications] = useState([]);
+
+    useEffect(() => {
+      loadNotifications();
+    }, []);
+
+    const loadNotifications = () => {
+      const userNotifications = DataService.getNotifications()
+              .filter(n => n.userId === user.id)
+              .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setNotifications(userNotifications);
+    };
+
+    const markAsRead = (notificationId) => {
+      const allNotifications = DataService.getNotifications();
+      const index = allNotifications.findIndex(n => n.id === notificationId);
+      allNotifications[index].isRead = true;
+      DataService.saveNotifications(allNotifications);
+      loadNotifications();
+    };
+
+    const markAllAsRead = () => {
+      const allNotifications = DataService.getNotifications();
+      allNotifications.forEach(n => {
+        if (n.userId === user.id) {
+          n.isRead = true;
+        }
+      });
+      DataService.saveNotifications(allNotifications);
+      loadNotifications();
+    };
+
+    return (
+            <div className="max-w-4xl mx-auto p-6">
+              <div className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl font-bold">通知中心</h1>
+                {notifications.some(n => !n.isRead) && (
+                        <button
+                                onClick={markAllAsRead}
+                                className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                        >
+                          全部標為已讀
+                        </button>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {notifications.map(notification => (
+                        <div
+                                key={notification.id}
+                                className={`bg-gray-900 rounded-xl border p-6 cursor-pointer transition-all ${
+                                        notification.isRead
+                                                ? 'border-gray-800 opacity-75'
+                                                : 'border-purple-500/40'
+                                }`}
+                                onClick={() => !notification.isRead && markAsRead(notification.id)}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-lg">
+                              {notification.title}
+                              {!notification.isRead && (
+                                      <span className="ml-2 inline-block w-2 h-2 bg-purple-500 rounded-full"></span>
+                              )}
+                            </h3>
+                            <span className="text-sm text-gray-500">
+                                        {new Date(notification.createdAt).toLocaleString('zh-TW')}
+                                    </span>
+                          </div>
+                          <p className="text-gray-400">{notification.content}</p>
+                        </div>
+                ))}
+
+                {notifications.length === 0 && (
+                        <div className="text-center py-12 text-gray-500">
+                          目前沒有通知
+                        </div>
+                )}
+              </div>
+            </div>
+    );
+  };
+
+  // 主應用程式
+  const App = () => {
+    const [user, setUser] = useState(null);
+    const [activeTab, setActiveTab] = useState('clubs');
+
+    useEffect(() => {
+      initializeData();
+    }, []);
+
+    const handleLogin = (userData) => {
+      setUser(userData);
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+    };
+
+    const handleLogout = () => {
+      setUser(null);
+      localStorage.removeItem('currentUser');
+      setActiveTab('clubs');
+    };
+
+    // 計算未讀通知數
+    const unreadCount = useMemo(() => {
+      if (!user) return 0;
+      return DataService.getNotifications()
+              .filter(n => n.userId === user.id && !n.isRead)
+              .length;
+    }, [user, activeTab]);
+
+    // 檢查已登入使用者
+    useEffect(() => {
+      const savedUser = localStorage.getItem('currentUser');
+      if (savedUser) {
+        setUser(JSON.parse(savedUser));
+      }
+    }, []);
+
+    if (!user) {
+      return <LoginForm onLogin={handleLogin} />;
+    }
+
+    return (
+            <div className="min-h-screen bg-gray-950">
+              <Navbar
+                      user={user}
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      onLogout={handleLogout}
+                      unreadCount={unreadCount}
+              />
+
+              <main>
+                {activeTab === 'clubs' && <ClubListPage user={user} />}
+                {activeTab === 'myClubs' && <MyClubsPage user={user} />}
+                {activeTab === 'admin' && user.isAdmin && <AdminPage user={user} />}
+                {activeTab === 'notifications' && <NotificationsPage user={user} />}
+              </main>
+            </div>
+    );
+  };
+
+  // 渲染應用程式
+  ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
